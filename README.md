@@ -1,6 +1,6 @@
 # CompactCollections
 
-[latest version] = `1.0.0`
+[latest version] = `1.0.1`
 
 A collection of compact, efficient and performant collections.
 

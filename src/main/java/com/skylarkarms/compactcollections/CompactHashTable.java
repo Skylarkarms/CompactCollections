@@ -3,7 +3,7 @@ package com.skylarkarms.compactcollections;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 
-public final class CompactHashTable<K, T> implements Iterable<CompactHashTable<K, T>.Node> {
+public class CompactHashTable<K, T> implements Iterable<CompactHashTable<K, T>.Node> {
     private static final int MIN_SIZE = 16;
 
     private final Node[] table;
@@ -223,6 +223,38 @@ public final class CompactHashTable<K, T> implements Iterable<CompactHashTable<K
                                                 t_k.equals(key)
                                 )
                 ) return bucket.value;
+            }
+        }
+        return null;
+    }
+
+    public Node getNode(K key) {
+        assert key != null;
+        int hash = key.hashCode();
+        Node bucket;
+        if ((bucket = table[
+                last_i & (hash ^ (hash >>> 16))
+                ]) != null) {
+            K t_k;
+            if (
+                    bucket.hash == hash
+                            &&
+                            (
+                                    (t_k = bucket.key) == key
+                                            ||
+                                            t_k.equals(key)
+                            )
+            ) return bucket;
+            while ((bucket = bucket.bucketNext) != null) {
+                if (
+                        bucket.hash == hash
+                                &&
+                                (
+                                        (t_k = bucket.key) == key
+                                                ||
+                                                t_k.equals(key)
+                                )
+                ) return bucket;
             }
         }
         return null;

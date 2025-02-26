@@ -1,11 +1,19 @@
 package com.skylarkarms.compactcollections;
 
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.VarHandle;
 import java.util.Arrays;
+import java.util.Iterator;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.IntFunction;
 
-public interface CompactArrayBuilder<E> {
+public interface CompactArrayBuilder<E> extends Iterable<E> {
     static<E> CompactArrayBuilder<E> ofSize(int initialSize, IntFunction<E[]> component) {
         return new CompactArrayBuilderImpl<>(initialSize, component);
+    }
+
+    static<E> CompactArrayBuilder<E> atomic(int initialSize, IntFunction<E[]> component) {
+        return new Atomic<>(initialSize, component);
     }
 
     void add(E element);
@@ -119,9 +127,150 @@ public interface CompactArrayBuilder<E> {
 
         @Override
         public E[] publish() { return Arrays.copyOf(array, index); }
+
+        @Override
+        public Iterator<E> iterator() {
+            ArrayWindow<E> window = new ArrayWindow<>(array, 0, index - 1);
+            return window.iterator();
+        }
+
+        @Override
+        public String toString() {
+            return "CompactArrayBuilderImpl{" +
+                    "array=" + CompactArrayBuilder.toString(array, index) +
+                    '}';
+        }
     }
-    private static int getCeil(int length) {
-        return (int) Math.ceil(length * 1.5);
+
+    final class Atomic<E> implements CompactArrayBuilder<E> {
+
+        private final AtomicInteger _index = new AtomicInteger();
+        private volatile E[] array;
+        static final VarHandle ARRAY;
+        static {
+            try {
+                ARRAY = MethodHandles.lookup().findVarHandle(Atomic.class, "array", Object[].class);
+            } catch (NoSuchFieldException | IllegalAccessException e) {
+                throw new ExceptionInInitializerError(e);
+            }
+        }
+        Atomic(int initialSize, IntFunction<E[]> component) {
+            this.array = component.apply(initialSize);
+        }
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public void add(E element) {
+            int index =_index.getAndIncrement();
+            E[] arr = array;
+            if (index >= arr.length) {
+                int ceil = getCeil(arr.length);
+                E[] next;
+                next = Arrays.copyOf(arr, ceil);
+                if ((arr = (E[]) ARRAY.compareAndExchange(this, arr, next)) == next) {
+                    next[index] = element;
+                }
+                else {
+                    //We must compete for the ceiling instead of competing for an index position.
+                    // competing for the index may leave the element placed inside an abandoned array.
+                    // while competing for the ceiling ensures that only the last set array is the one receiving the element.
+                    if (arr.length < ceil) {
+                        do {
+                            if (ARRAY.compareAndSet(this, arr, next)) {
+                                next[index] = element;
+                                return;
+                            }
+                            arr = array;
+                        } while (
+                                arr.length < ceil
+                        );
+                    }
+                    arr[index] = element;
+                }
+            } else {
+                arr[index] = element;
+            }
+        }
+
+        @Override
+        public E get(int index) {
+            return array[index];
+        }
+
+        @Override
+        public int size() {
+            return array.length;
+        }
+
+        @Override
+        public boolean equals(E[] that) {
+            return Arrays.equals(array, that);
+        }
+
+        /**
+         * May require read synchronization
+         * */
+        @Override
+        public E[] publish() {
+            int l = - 1;
+            E[] wit = null;
+            E[] res = null;
+            while (wit != array || l != _index.get()) {
+                wit = array;
+                l = _index.get();
+                res = Arrays.copyOf(wit, l);
+            }
+            return res;
+        }
+
+        /**
+         * May require read synchronization
+         * */
+        @Override
+        public Iterator<E> iterator() {
+            int l = - 1;
+            E[] wit = null;
+            final ArrayWindow<E> res;
+            // attempts cross field stabilization.
+            while (wit != array || l != _index.get()) {
+                wit = array;
+                l = _index.get();
+            }
+            res = new ArrayWindow<>(wit, 0, l - 1);
+            return res.iterator();
+        }
+
+        /**
+         * May require read synchronization.
+         * */
+        @Override
+        public String toString() {
+            int l = - 1;
+            E[] wit = null;
+            // attempts cross field stabilization.
+            while (wit != array || l != _index.get()) {
+                wit = array;
+                l = _index.get();
+            }
+            return "Atomic{" +
+                    "array=" + CompactArrayBuilder.toString(wit, l) +
+                    '}';
+        }
+    }
+
+    private static int getCeil(int length) { return (int) Math.ceil(length * 1.5); }
+
+    private static<S> String toString(S[] arr, int l) {
+        assert l > -1;
+        if (arr == null || l == 0) return "{}";
+        else {
+            final StringBuilder builder = new StringBuilder(l);
+            builder.append("{").append(arr[0]);
+            for (int i = 1; i < l; i++) {
+                builder.append(", ").append(arr[i]);
+            }
+            return builder.append("}").toString();
+        }
     }
 
 }

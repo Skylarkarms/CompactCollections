@@ -1,8 +1,11 @@
 # CompactCollections
 
-[latest version] = `1.0.1`
+[latest version] = `1.0.2`
 
 A collection of compact, efficient and performant collections.
+
+[found in]:
+    - [`io.github.skylarkarms:stringutils:`](https://github.com/Skylarkarms/StringUtils)
 
 ### Implementation
 In your `build.gradle` file

@@ -13,7 +13,7 @@ public class ArrayWindow<T> implements Iterable<T> {
      * @param start from inclusive
      * @param end to inclusive
      * */
-    ArrayWindow(T[] original, int start, int end) {
+    public ArrayWindow(T[] original, int start, int end) {
         this.original = original;
         if (start < 0) throw new IllegalStateException("start cannot be less than zero.");
         this.start = start;
@@ -31,9 +31,7 @@ public class ArrayWindow<T> implements Iterable<T> {
         return original[windowed];
     }
 
-    public int length() {
-        return width;
-    }
+    public int length() { return width; }
 
     @Override
     public Iterator<T> iterator() {
